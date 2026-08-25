@@ -206,9 +206,8 @@ DELETE FROM axdirectsql where axdirectsqlid = 99999999990050
 DELETE FROM axdirectsql where sqlname = 'axi_tstructprops_insupd'
 >>
 
-<<
+
 DELETE FROM axdirectsql where sqlname = 'axi_smartviewlist'
->>
 
 
 <<
