@@ -125,19 +125,52 @@ You want to add a new command: **`Configure SLA "Gold Policy"`** that opens cust
 
 
 ### Step 1: Register Autocomplete Prompt 
-If `Sla` is a new sub-option under `Configure`, ensure it is listed in `axi_command_prompts` so users receive auto-complete suggestions when typing `Configure`:
+If your new option is under **Configure** (`cmdtoken = 4`) or **SDK** (`cmdtoken = 7`), ensure it is registered in `axi_command_prompts` so users receive auto-complete suggestions:
 
+#### Option A: For `Configure` Commands (`cmdtoken = 4`)
 ```sql
--- 1. Append option name to Position 2 (Object Type values)
+-- 1. Append sub-option name to Position 2 (Object Type prompt values)
 UPDATE axi_command_prompts 
 SET promptvalues = promptvalues || ',SLA'
 WHERE cmdtoken = 4 AND wordpos = 2;
 
 -- 2. Append matching data source to Position 3 (Object Name data source)
+-- Use 'Axi_Dummy' if the sub-option is static (no 3rd token suggestion required)
 UPDATE axi_command_prompts
 SET promptsource = promptsource || ',Axi_Dummy'
 WHERE cmdtoken = 4 AND wordpos = 3;
+
+-- OR if dynamic: specify your custom Axpert Data Source (e.g., ',axi_custom_ds')
+-- UPDATE axi_command_prompts SET promptsource = promptsource || ',axi_custom_ds' WHERE cmdtoken = 4 AND wordpos = 3;
 ```
+
+#### Option B: For `SDK` Commands (`cmdtoken = 7`)
+```sql
+-- 1. Append sub-option name to Position 2 (SDK Type prompt values)
+UPDATE axi_command_prompts 
+SET promptvalues = promptvalues || ',My Custom Tool'
+WHERE cmdtoken = 7 AND wordpos = 2;
+
+-- 2. Append matching data source to Position 3 (SDK Name data source)
+-- Use 'Axi_Dummy' if static
+UPDATE axi_command_prompts
+SET promptsource = promptsource || ',Axi_Dummy'
+WHERE cmdtoken = 7 AND wordpos = 3;
+
+-- OR if dynamic: specify your custom Axpert Data Source (e.g., ',axi_custom_ds')
+-- UPDATE axi_command_prompts SET promptsource = promptsource || ',axi_custom_ds' WHERE cmdtoken = 7 AND wordpos = 3;
+```
+
+> [!IMPORTANT]
+> **Rules for using `param_field` (ADS Requirement)**:
+> - **If you are using `param_field`**: You should first configure an Axpert Data Source (ADS) in `axdirectsql` (for example, `mycustomds`). Then, you need to add `mycustomds` to `promptsource` like this:
+>   ```sql
+>   UPDATE axi_command_prompts
+>   SET promptsource = promptsource || ',mycustomds'
+>   WHERE cmdtoken = 4 AND wordpos = 3;
+>   ```
+> - **If you are not using an ADS**: You should **not** use `param_field` (leave `param_field` as `NULL`).
+> - Passing a search value at runtime when `param_field` is `NULL` will trigger a validation alert informing the user that no parameter field is configured for the command.
 
 ### Step 2: Insert the Configuration Row
 Execute the following SQL statement in your database:
@@ -163,7 +196,7 @@ INSERT INTO axi_command_config (
     '../aspx/SlaConfig.aspx',
     'role=:userroles&user=:username',
     'T'
-);
+); 
 ```
 
 ### Step 3: Test in the Command Palette
@@ -196,3 +229,12 @@ INSERT INTO axi_command_config (
 
 ### Q4: Can I temporarily disable a command without deleting the row?
 - Yes. Update the status flag: `UPDATE axi_command_config SET active = 'F' WHERE config_id = 'cfg_configure_sla';`.
+
+### Q5: Why do I get "Access violation in ASBTStruct.dll" when passing a search value in TStruct / Dual Mode navigation?
+- **Behavior of Dual-Mode Navigation (`tstruct/iview` or `iview/tstruct`)**:
+  - **No parameter supplied** (e.g. `Configure SM56C`): Directly opens the **IView** listing.
+  - **Parameter supplied** (e.g. `Configure SM56C "RecordName"`): Directly opens the **TStruct** form in edit mode using `param_field`.
+- **Root Cause & Resolution**:
+  - When passing a parameter to edit a TStruct, `param_field` must receive a valid, existing record key.
+  - If `param_field` is configured without defining an ADS in `axdirectsql` (or if a non-existent key is typed), the backend TStruct loader (`ASBTStruct.dll`) cannot locate the record in the database, resulting in an access violation.
+  - **Solution**: Always configure an Axpert Data Source (ADS) in `axdirectsql` for Position 3 so users select verified record keys from the auto-complete dropdown before opening the TStruct.

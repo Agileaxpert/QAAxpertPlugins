@@ -1,3 +1,4 @@
+
 <<
 CREATE TABLE axiconfig (axienabled varchar2(1), mainpagetemplate varchar2(255))
 >>

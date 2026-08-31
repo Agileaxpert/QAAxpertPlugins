@@ -933,6 +933,18 @@
         }) || null;
     }
 
+    function getDisabledCommandConfigRow(command, promptOption) {
+        if (!command || !promptOption) return null;
+        const cmdKey = command.trim().toLowerCase();
+        const optKey = promptOption.trim().toLowerCase();
+        return axiCommandConfigList.find(r => {
+            const rCmd = (r.command || r.Command || "").trim().toLowerCase();
+            const rOpt = (r.promptOptions || r.prompt_options || r.PromptOptions || "").trim().toLowerCase();
+            const rActive = (r.active ?? r.Active ?? "").toString().trim().toUpperCase();
+            return rCmd === cmdKey && rOpt === optKey && rActive !== "T" && rActive !== "TRUE";
+        }) || null;
+    }
+
     function resolveCommandUrlPlaceholders(urlStr, context = {}) {
         if (!urlStr || typeof urlStr !== "string") return urlStr || "";
 
@@ -999,6 +1011,13 @@
                     const resolved = tryResolveToken(2, rawParamName, commandConfig, false);
                     paramValue = (resolved && resolved.value) ? resolved.value : rawParamName;
                 }
+            }
+        }
+
+        if (tokens.length > 2 && rawParamName && rawParamName.toLowerCase() !== "create new") {
+            if (!paramField) {
+                showToast(`Parameter field is not configured for '${caption}'. Cannot filter with search value '${rawParamName}'.`);
+                return true;
             }
         }
 
@@ -1082,6 +1101,30 @@
         }
 
         if (optType === "iview") {
+            if (paramValue && paramField) {
+                let url = rawTargetUrl || `../aspx/iview.aspx?ivname=${promptId}`;
+                if (!url.includes("?")) {
+                    url += `?ivname=${promptId}`;
+                }
+                if (!url.includes(`${paramField}=`)) {
+                    const separator = url.includes("?") ? "&" : "?";
+                    url += `${separator}${paramField}=${encodeURIComponent(paramValue)}`;
+                }
+                if (extraParams) {
+                    const separator = url.includes("?") ? "&" : "?";
+                    url += `${separator}${extraParams}`;
+                }
+                url = resolveCommandUrlPlaceholders(url, context);
+                if (popUpOption) {
+                    const sep = url.includes("?") ? "&" : "?";
+                    url += `${sep}tname=${encodeURIComponent(caption)}&AxIsPop=true`;
+                    openPopOption(url);
+                } else {
+                    setCommandRoutes(input.value.trim(), url);
+                    loadIframeFn(url);
+                }
+                return true;
+            }
             redirectToIView(promptId, caption);
             return true;
         }
@@ -3651,7 +3694,21 @@
         ///Skipping PromptValue "With" token for edit
         if (!realSource && activePrompt.promptValues && groupKey.toLowerCase() !== "edit") {
 
-            const staticValues = activePrompt.promptValues.split(',').map(v => v.trim());
+            let staticValues = activePrompt.promptValues.split(',').map(v => v.trim());
+
+            if (groupKey.toLowerCase() === "configure" || groupKey.toLowerCase() === "sdk") {
+                if (axiCommandConfigList && axiCommandConfigList.length > 0) {
+                    staticValues = staticValues.filter(val => {
+                        const lowVal = val.toLowerCase().trim();
+                        if (groupKey.toLowerCase() === "sdk" && (lowVal === "tstruct" || lowVal === "iview")) {
+                            return true;
+                        }
+                        const activeRow = getCommandConfigRow(groupKey, val);
+                        return !!activeRow;
+                    });
+                }
+            }
+
             const result = staticValues.filter(val => val.toLowerCase().startsWith(partialTyped.toLowerCase()));
             filteredObjects = result.map(val => ({ name: val, displaydata: val }));
 
@@ -6833,6 +6890,16 @@
             }
         }
 
+        // Check if command configuration is disabled (active = 'F' or not active)
+        const disabledRow = (firstParamValue ? getDisabledCommandConfigRow(group, firstParamValue) : null)
+            || (handlerKey !== 'default' ? getDisabledCommandConfigRow(group, handlerKey) : null);
+
+        if (disabledRow) {
+            const optName = disabledRow.promptOptions || disabledRow.prompt_options || disabledRow.PromptOptions || firstParamValue;
+            showToast(`The command '${group} ${optName}' is disabled or invalid.`);
+            return;
+        }
+
         // Dynamically resolve against backend axi_command_config without touching JS code
         const dynamicRow = (firstParamValue ? getCommandConfigRow(group, firstParamValue) : null)
             || (handlerKey !== 'default' ? getCommandConfigRow(group, handlerKey) : null)
@@ -6851,17 +6918,14 @@
         const groupHandlers = getGroupHandlers(group);
 
         if (!groupHandlers) {
-            // console.error(`System Error: No handlers object defined for command group '${group}'`);
+            showToast(`The command '${tokens.join(" ")}' is disabled or invalid.`);
             return;
         }
-
 
         const handler = groupHandlers[handlerKey] || groupHandlers['default'];
 
         if (!handler) {
-            showToast(`Dispatch Error: No handler function found for '${group}' -> '${handlerKey}'`);
-
-            // console.error(`Dispatch Error: No handler function found for '${group}' -> '${handlerKey}'`);
+            showToast(`The command '${tokens.join(" ")}' is disabled or invalid.`);
             return;
         }
 
@@ -13029,8 +13093,15 @@
             return false;
         }
         const cleanOpt = (sdkOptionName || "").toString().trim().toLowerCase();
-        const devOptKey = SDK_DEV_OPT_MAP[cleanOpt] || cleanOpt;
-        return allowedOpts.includes(devOptKey);
+        
+        // If it is a built-in Axpert studio tool, check specific permission
+        if (SDK_DEV_OPT_MAP[cleanOpt]) {
+            const devOptKey = SDK_DEV_OPT_MAP[cleanOpt];
+            return allowedOpts.includes(devOptKey);
+        }
+
+        // Custom / Dynamic SDK options configured via axi_command_config are allowed for users with buildAccess
+        return true;
     }
 
     let cachedAccessPermissions = null;
@@ -13113,7 +13184,10 @@
 
                         for (let i = 0; i < types.length; i++) {
                             const rawType = types[i].trim();
-                            if (isDevOptionAllowed(rawType)) {
+                            const lowType = rawType.toLowerCase();
+                            const isExempt = lowType === "tstruct" || lowType === "iview";
+                            const isActive = isExempt || ((axiCommandConfigList && axiCommandConfigList.length > 0) ? !!getCommandConfigRow("SDK", rawType) : true);
+                            if (isActive && isDevOptionAllowed(rawType)) {
                                 filteredTypes.push(rawType);
                                 filteredSources.push(sources[i] ? sources[i].trim() : "Axi_Dummy");
                             }
@@ -13140,41 +13214,35 @@
 
         const roles = (currentUserRole || "").split(",").map(r => r.trim().toLowerCase());
         const isAdmin = currentUserName === "admin" && roles.includes("default");
-        // const isAdmin = false;
 
-        if (!isAdmin) {
-            const configurePrompts = commandsFromDb["Configure"].prompts;
+        const configurePrompts = commandsFromDb["Configure"].prompts;
+        const objectTypePrompt = configurePrompts?.find(p => p.prompt === "object type" || p.wordPos === 2);
+        const objectNamePrompt = configurePrompts?.find(p => p.prompt === "object name" || p.wordPos === 3);
 
-            // configurePrompts.forEach(prompt => {
-            //     if (prompt.prompt === "object type" && prompt.promptValues) {
-            //         let values = prompt.promptValues.split(",");
+        if (objectTypePrompt && objectTypePrompt.promptValues) {
+            const types = objectTypePrompt.promptValues.split(",");
+            const sources = (objectNamePrompt && objectNamePrompt.promptSource) ? objectNamePrompt.promptSource.split(",") : [];
 
-            //         values = values.filter(v => v.trim() !== "User Activation");
+            const filteredTypes = [];
+            const filteredSources = [];
 
-            //         prompt.promptValues = values.join(",");
-            //     }
-            // });
+            for (let i = 0; i < types.length; i++) {
+                const rawType = types[i].trim();
+                const isActive = (axiCommandConfigList && axiCommandConfigList.length > 0) ? !!getCommandConfigRow("Configure", rawType) : true;
 
-            const objectTypePrompt = configurePrompts.find(p => p.prompt === "object type");
-
-            const objectNamePrompt = configurePrompts.find(p => p.prompt === "object name");
-
-            if (objectTypePrompt && objectNamePrompt) {
-                const types = objectTypePrompt.promptValues.split(",");
-                const sources = objectNamePrompt.promptSource.split(",");
-
-                const index = types.findIndex(
-                    t => t.trim() === "User Activation"
-                );
-
-                if (index !== -1) {
-                    types.splice(index, 1);
-                    sources.splice(index, 1);
-
-                    objectTypePrompt.promptValues = types.join(",");
-                    objectNamePrompt.promptSource = sources.join(",");
+                if (!isAdmin && rawType.toLowerCase() === "user activation") {
+                    continue;
                 }
 
+                if (isActive) {
+                    filteredTypes.push(rawType);
+                    filteredSources.push(sources[i] ? sources[i].trim() : "Axi_Dummy");
+                }
+            }
+
+            objectTypePrompt.promptValues = filteredTypes.join(",");
+            if (objectNamePrompt) {
+                objectNamePrompt.promptSource = filteredSources.join(",");
             }
         }
 
