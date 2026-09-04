@@ -636,7 +636,7 @@
             suppressFocusSuggestions = true;
             input.disabled = false;
             input.placeholder = "Axpert AI";
-            console.log("commands: ", JSON.stringify(commands)); 
+            console.log("commands: ", JSON.stringify(commands));
         }
     }
 
@@ -6225,7 +6225,6 @@
                     return;
                 }
                 e.preventDefault();
-                hide();
 
                 const cursorPos = input.selectionStart;
 
@@ -6276,11 +6275,20 @@
 
                 input.value = tokens.join(" ");
 
+                if (tokens.length <= 2) {
+                    setCommandTransid = null;
+                    if (transIDcheck) {
+                        createfieldnamevaluesList[transIDcheck] = [];
+                    }
+                }
+
                 // console.log("After backspace our list : ");
                 // console.log(createfieldnamevaluesList[transIDcheck]);
 
                 dateControlBoolean = false;
                 resetSetCommandState();
+                input.focus();
+                input.setSelectionRange(input.value.length, input.value.length);
                 handleInput();
 
 
@@ -6293,7 +6301,6 @@
                     return;
                 }
                 e.preventDefault();
-                hide();
 
                 const cursorPos = input.selectionStart;
 
@@ -6318,8 +6325,14 @@
 
                 input.value = tokens.join(" ");
 
+                if (tokens.length <= 2) {
+                    setCommandTransid = null;
+                }
+
                 dateControlBoolean = false;
                 resetSetCommandState();
+                input.focus();
+                input.setSelectionRange(input.value.length, input.value.length);
                 handleInput();
             }
 
@@ -7857,10 +7870,10 @@
         }
 
         const appname = getProjectName() || "";
-        const username = window.mainUserName || 
-            (typeof callParentNew === "function" && callParentNew("mainUserName")) || 
-            (typeof parent !== "undefined" && parent.mainUserName) || 
-            (typeof top !== "undefined" && top.mainUserName) || 
+        const username = window.mainUserName ||
+            (typeof callParentNew === "function" && callParentNew("mainUserName")) ||
+            (typeof parent !== "undefined" && parent.mainUserName) ||
+            (typeof top !== "undefined" && top.mainUserName) ||
             "";
 
         if (!appname) {
@@ -13108,7 +13121,7 @@
             return false;
         }
         const cleanOpt = (sdkOptionName || "").toString().trim().toLowerCase();
-        
+
         // If it is a built-in Axpert studio tool, check specific permission
         if (SDK_DEV_OPT_MAP[cleanOpt]) {
             const devOptKey = SDK_DEV_OPT_MAP[cleanOpt];
