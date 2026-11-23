@@ -2,7 +2,7 @@
 
 ## Summary
 
-This release fixes the pop-up issues reported by QA on the **Configure** command (Issues 2 to 5), makes **New** on a pop-up listing open in the same pop-up tab, fixes the Sales Order **Edit** error when **NA** is selected (database change).
+This release fixes the pop-up issues reported by QA on the **Configure** command (Issues 2 to 5), makes **New** on a pop-up listing open in the same pop-up tab, and fixes the Sales Order **Edit** error when **NA** is selected (database change).
 
 ---
 
@@ -45,7 +45,7 @@ This release fixes the pop-up issues reported by QA on the **Configure** command
 
 ## Database Changes
 
-- **`fn_axi_getstructs_obj`** (PostgreSQL and Oracle, `axi_functions.sql`): the record lists of `view` / `edit` now only include records whose `cancel` column is not null (Bug Fix 7).
+- **`fn_axi_getstructs_obj`** (PostgreSQL and Oracle, `axi_functions.sql`): the record lists of `view` / `edit` now only include records whose `cancel` column is not null (Bug Fix 6).
 - **After running the script:** recycle the app pool or clear the ADS cache, otherwise the old query keeps running.
 
 ---
